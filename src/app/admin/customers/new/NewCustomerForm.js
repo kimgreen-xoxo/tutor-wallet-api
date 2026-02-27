@@ -1,7 +1,8 @@
 "use client";
 
+import React from "react";
 import { useFormState, useFormStatus } from "react-dom";
-import styles from "./AdminUsers.module.css";
+import styles from "./NewCustomerForm.module.css";
 import { createUser } from "./actions";
 
 const INITIAL_STATE = { message: null };

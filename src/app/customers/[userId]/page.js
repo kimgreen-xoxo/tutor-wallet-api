@@ -1,4 +1,5 @@
 import styles from "./CustomerPage.module.css";
+import { headers } from "next/headers";
 
 function formatRemaining(remainingMin) {
   const m = Number(remainingMin) || 0;
@@ -28,14 +29,14 @@ function displayAmount(type, amount) {
 }
 
 async function fetchCustomer(userId) {
-  const base = process.env.NEXT_PUBLIC_BASE_URL;
+  const h = await headers();
 
-  const res = await fetch(
-    `${base}/api/customer?u=${encodeURIComponent(userId)}`,
-    {
-      cache: "no-store",
-    },
-  );
+  const host = h.get("x-forwarded-host") ?? h.get("host");
+  const proto = h.get("x-forwarded-proto") ?? "http";
+
+  const url = `${proto}://${host}/api/customer?u=${encodeURIComponent(userId)}`;
+
+  const res = await fetch(url, { cache: "no-store" });
 
   if (!res.ok) {
     const j = await res.json().catch(() => ({}));
@@ -50,12 +51,14 @@ export default async function CustomerPage({ params }) {
   const { userId } = await params;
   const result = await fetchCustomer(userId);
 
-  if (!userId) {
+  if (!result.ok) {
     return (
       <div className={styles.container}>
         <div className={styles.card}>
           <div className={styles.kicker}>조회 실패</div>
-          <div className={styles.name}>userId가 비어있습니다.</div>
+          <div className={styles.name}>
+            {result.error} ({result.status})
+          </div>
         </div>
       </div>
     );

@@ -1,0 +1,107 @@
+.wrapper {
+  padding: 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.headerRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.title {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 800;
+}
+
+.subTitle {
+  margin-top: 6px;
+  color: #666;
+}
+
+.userId {
+  color: #999;
+}
+
+.backLink {
+  text-decoration: none;
+  font-weight: 600;
+  color: #111;
+}
+
+.card {
+  border: 1px solid #eaeaea;
+  border-radius: 14px;
+  padding: 20px;
+  background: #ffffff;
+}
+
+.summaryRow {
+  display: flex;
+  gap: 40px;
+  flex-wrap: wrap;
+}
+
+.summaryBlock {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.summaryLabel {
+  font-size: 12px;
+  color: #777;
+}
+
+.summaryValue {
+  font-size: 20px;
+  font-weight: 800;
+}
+
+.sectionHeader {
+  padding: 14px 18px;
+  border-bottom: 1px solid #eee;
+  background: #f8f8f8;
+  font-weight: 800;
+}
+
+.ledgerList {
+  display: flex;
+  flex-direction: column;
+}
+
+.ledgerRow {
+  display: flex;
+  justify-content: space-between;
+  padding: 14px 18px;
+  border-top: 1px solid #f2f2f2;
+}
+
+.ledgerLeft {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.type {
+  font-weight: 700;
+}
+
+.date {
+  font-size: 12px;
+  color: #777;
+}
+
+.amount {
+  font-weight: 800;
+}
+
+.empty {
+  padding: 24px;
+  color: #777;
+}
