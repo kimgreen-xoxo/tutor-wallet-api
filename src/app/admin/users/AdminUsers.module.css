@@ -50,6 +50,17 @@
   cursor: pointer;
 }
 
+/* ✅ 추가 */
+.button:hover {
+  background: #111827;
+  color: white;
+}
+
+.button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 .resultHint {
   margin-top: 12px;
   font-size: 12px;
