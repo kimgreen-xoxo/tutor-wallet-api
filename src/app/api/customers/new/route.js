@@ -119,12 +119,14 @@ export async function POST(req) {
     const NAME = idx.name;
     const HOURLY_RATE = idx.hourlyRate;
     const SHORT_URL = idx.shortUrl;
+    const CREATED_AT = idx.createdAt;
+    const PHONE = idx.phone;
 
-    if ([USER_ID, NAME, HOURLY_RATE, SHORT_URL].some((n) => n == null)) {
+    if ([USER_ID, NAME, HOURLY_RATE, SHORT_URL, CREATED_AT, PHONE].some((n) => n == null)) {
       return Response.json(
         {
           error: "users_header_mismatch",
-          needed: ["userId", "name", "hourlyRate", "shortUrl"],
+          needed: ["userId", "name", "hourlyRate", "shortUrl", "createdAt", "phone"],
         },
         { status: 500 },
       );
@@ -139,6 +141,8 @@ export async function POST(req) {
     newRow[NAME] = name;
     newRow[HOURLY_RATE] = hourlyRate;
     newRow[SHORT_URL] = shortUrl;
+    newRow[CREATED_AT] = new Date().toISOString();
+    newRow[PHONE] = body.phone || "";
 
     // ✅ Users에 append
     await sheets.spreadsheets.values.append({
@@ -152,7 +156,7 @@ export async function POST(req) {
 
     return Response.json({
       success: true,
-      user: { userId, name, hourlyRate, shortUrl },
+      user: { userId, name, hourlyRate, shortUrl, phone: newRow[PHONE], createdAt: newRow[CREATED_AT] },
     });
   } catch (e) {
     console.error(e);

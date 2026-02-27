@@ -6,7 +6,7 @@ export async function createUser(prevState, formData) {
     const name = formData.get("name");
     const hourlyRate = Number(formData.get("hourlyRate"));
 
-    const res = await fetch("http://localhost:3000/api/admin/users", {
+    const res = await fetch("http://localhost:3000/api/customers/new", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -19,7 +19,7 @@ export async function createUser(prevState, formData) {
     const raw = await res.text();
 
     if (!res.ok) {
-      return { message: `❌ 생성 실패 (status ${res.status})` };
+      return { message: `❌ 생성 실패 (status ${res.status}) ${raw}` };
     }
 
     // 성공 응답에서 userId 뽑기
@@ -33,6 +33,6 @@ export async function createUser(prevState, formData) {
     const userId = data?.user?.userId;
     return { message: userId ? `✅ 생성 완료 (ID: ${userId})` : "✅ 생성 완료" };
   } catch (e) {
-    return { message: "❌ 서버 오류 발생" };
+    return { message: `❌ 서버 오류 발생: ${String(e?.message || e)}` };
   }
 }

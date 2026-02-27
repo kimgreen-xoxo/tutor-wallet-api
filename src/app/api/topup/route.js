@@ -7,6 +7,7 @@ export function GET() {
 export async function POST(req) {
   try {
     const { userId, amount, requestId } = await req.json();
+    console.log("[TOPUP INPUT]", { userId, amount, requestId }); 
 
     if (!userId || typeof amount !== "number") {
       return Response.json({ error: "invalid_input" }, { status: 400 });
