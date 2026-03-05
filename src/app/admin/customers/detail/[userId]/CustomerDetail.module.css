@@ -105,3 +105,9 @@
   padding: 24px;
   color: #777;
 }
+
+.headerActionsRow {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 12px;
+}
