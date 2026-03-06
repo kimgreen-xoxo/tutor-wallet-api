@@ -1,6 +1,13 @@
+.wrapper{
+  min-height: 100vh;        
+  display: flex;
+  align-items: center;     
+  justify-content: center; 
+}
+
 .container {
-  padding: 16px;
-  max-width: 560px;
+  width: 100%;
+  max-width: 540px; 
   margin: 0 auto;
   font-family: Arial, sans-serif;
 }
@@ -42,27 +49,38 @@
   font-size: 14px;
 }
 
-.button {
-  border: 0;
-  border-radius: 10px;
-  padding: 10px 12px;
-  font-weight: 800;
-  cursor: pointer;
-}
 
-/* ✅ 추가 */
-.button:hover {
-  background: #111827;
-  color: white;
-}
-
-.button:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
 
 .resultHint {
   margin-top: 12px;
   font-size: 12px;
   color: #6b7280;
+}
+
+/* textarea 전용 스타일 */
+.textarea {
+  padding: 12px 14px;
+  border: 1px solid #dcdcdc;
+  border-radius: 8px;
+  font-size: 14px;
+  resize: none;
+  min-height: 80px;
+}
+
+/* 버튼 영역 가로 정렬 */
+.actionsRow {
+  display: flex;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+
+.input::placeholder,
+.textarea::placeholder {
+  transition: opacity 0.15s ease;
+}
+
+.input:focus::placeholder,
+.textarea:focus::placeholder {
+  opacity: 0;
 }

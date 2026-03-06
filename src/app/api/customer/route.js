@@ -1,4 +1,5 @@
 import { google } from "googleapis";
+import { ok, fail } from "@/lib/api/response";
 
 const SCOPES = ["https://www.googleapis.com/auth/spreadsheets.readonly"];
 
@@ -47,7 +48,8 @@ function normalizeStatus(raw) {
   // status 컬럼을 쓰는 경우를 대비해 넉넉히 처리
   // - 비활성으로 보는 케이스: inactive/disabled/blocked/false/0/no
   if (!s) return "active";
-  if (["inactive", "disabled", "blocked", "false", "0", "no"].includes(s)) return "inactive";
+  if (["inactive", "disabled", "blocked", "false", "0", "no"].includes(s))
+    return "inactive";
   return "active";
 }
 
@@ -57,7 +59,11 @@ export async function GET(req) {
     const userId = toStr(url.searchParams.get("u"));
 
     if (!userId) {
-      return Response.json({ error: "missing_user_id" }, { status: 400 });
+      return fail(
+        "missing_user_id",
+        "Query param 'u' (userId) is required.",
+        400,
+      );
     }
 
     const spreadsheetId = mustEnv("SPREADSHEET_ID");
@@ -75,10 +81,10 @@ export async function GET(req) {
     const ledger = ledgerRes?.values || [];
 
     if (users.length < 2) {
-      return Response.json({ error: "users_empty" }, { status: 500 });
+      return fail("users_empty", "Users sheet has no data rows.", 500);
     }
     if (ledger.length < 2) {
-      return Response.json({ error: "ledger_empty" }, { status: 500 });
+      return fail("ledger_empty", "Ledger sheet has no data rows.", 500);
     }
 
     // --- Users: userId, name, hourlyRate, (status)
@@ -90,9 +96,11 @@ export async function GET(req) {
     const U_STATUS = uHeader.status; // 선택
 
     if (U_USER_ID == null || U_NAME == null || U_HOURLY_RATE == null) {
-      return Response.json(
-        { error: "users_header_mismatch", needed: ["userId", "name", "hourlyRate"] },
-        { status: 500 }
+      return fail(
+        "users_header_mismatch",
+        "Users header mismatch. Required columns: userId, name, hourlyRate.",
+        500,
+        { needed: ["userId", "name", "hourlyRate"] },
       );
     }
 
@@ -112,11 +120,11 @@ export async function GET(req) {
     }
 
     if (!name) {
-      return Response.json({ error: "user_not_found" }, { status: 404 });
+      return fail("user_not_found", `User not found: ${userId}`, 404);
     }
 
     if (status !== "active") {
-      return Response.json({ error: "user_inactive" }, { status: 403 });
+      return fail("user_inactive", `User is inactive: ${userId}`, 403);
     }
 
     // --- Wallet: userId, balance (있으면 사용, 없으면 ledger 합산으로 계산)
@@ -145,11 +153,18 @@ export async function GET(req) {
     const L_AMOUNT = lHeader.amount;
     const L_CREATED_AT = lHeader.createdAt;
 
-    if (L_USER_ID == null || L_TYPE == null || L_AMOUNT == null || L_CREATED_AT == null) {
-      return Response.json(
-        { error: "ledger_header_mismatch", needed: ["userId", "type", "amount", "createdAt"] },
-        { status: 500 }
-      );
+    if (
+      L_USER_ID == null ||
+      L_TYPE == null ||
+      L_AMOUNT == null ||
+      L_CREATED_AT == null
+    ) {
+      return fail(
+  "ledger_header_mismatch",
+  "Ledger header mismatch. Required columns: userId, type, amount, createdAt.",
+  500,
+  { needed: ["userId", "type", "amount", "createdAt"] }
+);
     }
 
     // ✅ 최근 거래 3개: 충전(topup) / 차감(charge)만
@@ -189,19 +204,27 @@ export async function GET(req) {
     const remainingMin =
       perMinuteRate > 0 ? Math.max(0, Math.floor(balance / perMinuteRate)) : 0;
 
-    return Response.json({
-      userId,
-      name,
-      hourlyRate,
-      balance,
-      perMinuteRate,
-      remainingMin,
-      recent,
-    });
+    return ok(
+  {
+    userId,
+    name,
+    hourlyRate,
+    balance,
+    perMinuteRate,
+    remainingMin,
+    recent,
+  },
+  {
+    ts: new Date().toISOString(),
+    recentCount: recent.length,
+  }
+);
   } catch (err) {
-    return Response.json(
-      { error: "server_error", message: String(err?.message || err) },
-      { status: 500 }
-    );
+    return fail(
+  "server_error",
+  "Unexpected server error.",
+  500,
+  { message: String(err?.message || err) }
+);
   }
 }
