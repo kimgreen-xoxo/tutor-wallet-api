@@ -8,7 +8,13 @@ import styles from "./TopupModal.module.css";
  * - 열기/닫기 상태는 부모(page.js)에서 제어
  * - 충전 성공하면 부모에게 onSuccess()로 알려서 detail 새로고침 유도
  */
-export default function TopupModal({ open, onClose, userId, userName, onSuccess }) {
+export default function TopupModal({
+  open,
+  onClose,
+  userId,
+  userName,
+  onSuccess,
+}) {
   // 역할: 모달 입력값(천단위 콤마 표시)
   const [amountInput, setAmountInput] = useState("");
 
@@ -52,7 +58,6 @@ export default function TopupModal({ open, onClose, userId, userName, onSuccess 
 
   // 역할: idempotency(중복 요청 방지용) requestId 생성
   function makeRequestId() {
-    // 예: topup_U0002_1700000000000_ab12
     const rand = Math.random().toString(16).slice(2, 6);
     return `topup_${userId}_${Date.now()}_${rand}`;
   }
@@ -66,8 +71,12 @@ export default function TopupModal({ open, onClose, userId, userName, onSuccess 
       return;
     }
 
-    // ✅ amount 검증 (김과장 규칙 유지: 정수, 1 ~ 1,000,000)
-    if (!Number.isInteger(amountNumber) || amountNumber <= 0 || amountNumber > 1_000_000) {
+    // ✅ amount 검증
+    if (
+      !Number.isInteger(amountNumber) ||
+      amountNumber <= 0 ||
+      amountNumber > 1_000_000
+    ) {
       setError("충전 금액은 1 ~ 1,000,000 사이의 정수여야 합니다.");
       return;
     }
@@ -77,17 +86,16 @@ export default function TopupModal({ open, onClose, userId, userName, onSuccess 
     try {
       setPending(true);
 
-      // NOTE: 같은 프로젝트 내부 API라 상대경로로 호출 (배포/로컬 모두 안전)
-      const res = await fetch("/api/topup", {
+      // NOTE: 같은 프로젝트 내부 API라 상대경로로 호출
+      const res = await fetch("/api/ledger/topup", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         cache: "no-store",
         body: JSON.stringify({
           userId,
+          userName,
           amount: amountNumber,
-          requestId,
-          // NOTE: 이름까지 시트에 찍기로 했으니 함께 보냄(라우트에서 받아서 기록)
-          userName: userName || "",
+          relatedSessionId: "",
         }),
       });
 
@@ -98,7 +106,8 @@ export default function TopupModal({ open, onClose, userId, userName, onSuccess 
 
       if (!ok) {
         const code = json?.error?.code || json?.error || "topup_failed";
-        const msg = json?.error?.message || json?.message || "충전에 실패했습니다.";
+        const msg =
+          json?.error?.message || json?.message || "충전에 실패했습니다.";
         setError(`${code}: ${msg}`);
         return;
       }
@@ -119,20 +128,25 @@ export default function TopupModal({ open, onClose, userId, userName, onSuccess 
     <div className={styles.modalBackdrop} onClick={onClose}>
       <div
         className={styles.modal}
-        onClick={(e) => e.stopPropagation()} // 역할: 모달 내부 클릭은 닫힘 방지
+        onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
       >
         <div className={styles.modalHeader}>
           <div className={styles.modalTitle}>요금 충전</div>
-          <button className={styles.modalClose} type="button" onClick={onClose} aria-label="닫기">
+          <button
+            className={styles.modalClose}
+            type="button"
+            onClick={onClose}
+            aria-label="닫기"
+          >
             ×
           </button>
         </div>
 
         <div className={styles.modalBody}>
           <div className={styles.modalHint}>
-            대상: <b>{userName || "-"}</b> ({userId})
+            <b>{userName || "-"}</b>
           </div>
 
           <label className={styles.label}>
@@ -140,9 +154,15 @@ export default function TopupModal({ open, onClose, userId, userName, onSuccess 
             <input
               className={styles.input}
               inputMode="numeric"
-              placeholder="예) 65,000"
               value={amountInput}
-              onChange={(e) => setAmountInput(formatNumberWithComma(e.target.value))}
+              onChange={(e) =>
+                setAmountInput(formatNumberWithComma(e.target.value))
+              }
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !pending) {
+                  submitTopup();
+                }
+              }}
               autoFocus
             />
           </label>
@@ -151,10 +171,20 @@ export default function TopupModal({ open, onClose, userId, userName, onSuccess 
         </div>
 
         <div className={styles.modalActions}>
-          <button className={styles.secondaryButton} type="button" onClick={onClose} disabled={pending}>
+          <button
+            className={styles.secondaryButton}
+            type="button"
+            onClick={onClose}
+            disabled={pending}
+          >
             취소
           </button>
-          <button className={styles.button} type="button" onClick={submitTopup} disabled={pending}>
+          <button
+            className={styles.button}
+            type="button"
+            onClick={submitTopup}
+            disabled={pending}
+          >
             {pending ? "처리 중..." : "충전하기"}
           </button>
         </div>

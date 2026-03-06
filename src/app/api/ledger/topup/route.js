@@ -1,216 +1,184 @@
+/**
+ * POST /api/topup
+ * 역할:
+ * 1) 요청(userId, amount) 검증
+ * 2) Google Sheets Ledger 시트에 거래 기록 1줄 추가
+ * 3) ok / error 구조로 응답
+ */
+
 import { google } from "googleapis";
 
-export function GET() {
-  return Response.json({ ok: true, message: "topup route alive" });
-}
-
-const SCOPES = ["https://www.googleapis.com/auth/spreadsheets"];
-
-// --- utils
-function mustEnv(name) {
-  const v = process.env[name];
-  if (!v) {
-    throw new Error(`Missing env: ${name}`);
-  }
-  return v;
-}
-
-function toStr(v) {
-  return String(v ?? "").trim();
-}
-
+/** 어떤 값이 와도 숫자로 안전 변환, 실패 시 0 */
 function toNum(v) {
   const n = Number(String(v ?? "0").replace(/,/g, ""));
   return Number.isFinite(n) ? n : 0;
 }
 
-function headerIndexMap(headerRow) {
-  const map = {};
-  headerRow.forEach((h, i) => {
-    map[toStr(h)] = i;
-  });
-  return map;
+/** 필수 환경변수 검사 */
+function mustEnv(name) {
+  const value = process.env[name];
+
+  if (!value) {
+    throw new Error(`Missing env: ${name}`);
+  }
+
+  return value;
 }
 
-function makeLedgerId() {
-  // 충돌 확률 낮추기: timestamp + random
-  const rand = Math.floor(Math.random() * 10000)
-    .toString()
-    .padStart(4, "0");
-  return `L${Date.now()}_${rand}`;
-}
-
-async function getSheetsClient() {
+/** 서비스 계정 JSON 문자열 파싱 */
+function getServiceAccount() {
   const raw = mustEnv("GOOGLE_SERVICE_ACCOUNT_KEY");
-  const key = JSON.parse(raw);
 
-  const jwt = new google.auth.JWT({
-    email: key.client_email,
-    key: key.private_key,
-    scopes: SCOPES,
-  });
-
-  await jwt.authorize();
-  return google.sheets({ version: "v4", auth: jwt });
-}
-
-async function findUserNameById(sheets, spreadsheetId, userId) {
-  // Users 시트에서 userId로 name 찾기 (헤더 매핑)
-  const { data } = await sheets.spreadsheets.values.get({
-    spreadsheetId,
-    range: "Users!A:Z",
-  });
-
-  const rows = data.values || [];
-  if (rows.length < 2) return "";
-
-  const h = headerIndexMap(rows[0]);
-  const I_USER_ID = h.userId;
-  const I_NAME = h.name;
-
-  if (I_USER_ID == null || I_NAME == null) return "";
-
-  for (let i = 1; i < rows.length; i++) {
-    if (toStr(rows[i][I_USER_ID]) === userId) {
-      return toStr(rows[i][I_NAME]);
-    }
-  }
-
-  return "";
-}
-
-async function isDuplicateRequestId(sheets, spreadsheetId, requestId) {
-  // Ledger에서 requestId 컬럼 찾아서 중복 체크 (헤더 매핑)
-  const { data } = await sheets.spreadsheets.values.get({
-    spreadsheetId,
-    range: "Ledger!A:Z",
-  });
-
-  const rows = data.values || [];
-  if (rows.length < 2) return false;
-
-  const h = headerIndexMap(rows[0]);
-  const I_REQUEST_ID = h.requestId;
-
-  // requestId 컬럼이 없으면 중복 체크 불가 -> false로 처리
-  if (I_REQUEST_ID == null) return false;
-
-  for (let i = 1; i < rows.length; i++) {
-    if (toStr(rows[i][I_REQUEST_ID]) === requestId) return true;
-  }
-
-  return false;
-}
-
-export async function POST(req) {
   try {
-    const body = await req.json().catch(() => ({}));
-    const userId = toStr(body.userId);
-    const amount = toNum(body.amount);
-    const requestId = toStr(body.requestId);
+    const parsed = JSON.parse(raw);
 
-    console.log("[TOPUP INPUT]", { userId, amount, requestId });
+    if (!parsed.client_email || !parsed.private_key) {
+      throw new Error("Invalid GOOGLE_SERVICE_ACCOUNT_KEY");
+    }
+
+    return parsed;
+  } catch (error) {
+    throw new Error("GOOGLE_SERVICE_ACCOUNT_KEY JSON parse failed");
+  }
+}
+
+/** 간단한 고유 ID 생성 */
+function createId(prefix) {
+  return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+}
+
+/** Ledger 시트에 topup row 추가 */
+async function appendLedgerRow({ userId, userName, relatedSessionId, amount }) {
+  const sheetId = mustEnv("SPREADSHEET_ID");
+  const serviceAccount = getServiceAccount();
+
+  const auth = new google.auth.JWT({
+    email: serviceAccount.client_email,
+    key: serviceAccount.private_key,
+    scopes: ["https://www.googleapis.com/auth/spreadsheets"],
+  });
+
+  const sheets = google.sheets({
+    version: "v4",
+    auth,
+  });
+
+  const createdAt = new Date().toISOString();
+  const ledgerId = createId("ledger");
+  const requestId = createId("req");
+
+  // 컬럼 순서:
+  // A userId
+  // B userName
+  // C type
+  // D amount
+  // E memo
+  // F createdAt
+  // G relatedSessionId
+  // H ledgerId
+  // I requestId
+  const values = [
+    [
+      userId,
+      userName,
+      "topup",
+      amount,
+      "관리자 충전",
+      createdAt,
+      relatedSessionId,
+      ledgerId,
+      requestId,
+    ],
+  ];
+
+  const result = await sheets.spreadsheets.values.append({
+    spreadsheetId: sheetId,
+    range: "Ledger!A:I",
+    valueInputOption: "USER_ENTERED",
+    insertDataOption: "INSERT_ROWS",
+    requestBody: {
+      values,
+    },
+  });
+
+  return {
+    createdAt,
+    ledgerId,
+    requestId,
+    updates: result.data?.updates ?? null,
+  };
+}
+
+export async function POST(request) {
+  try {
+    const body = await request.json();
+
+    const userId = String(body.userId ?? "").trim();
+    const userName = String(body.userName ?? "").trim();
+    const relatedSessionId = String(body.relatedSessionId ?? "").trim();
+    const amount = toNum(body.amount);
 
     if (!userId) {
-      return Response.json({ ok: false, error: { code: "missing_user_id" } }, { status: 400 });
-    }
-
-    if (!requestId) {
-      return Response.json({ ok: false, error: { code: "missing_request_id" } }, { status: 400 });
-    }
-
-    if (!Number.isInteger(amount) || amount <= 0 || amount > 1_000_000) {
-      return Response.json({ ok: false, error: { code: "invalid_amount" } }, { status: 400 });
-    }
-
-    const spreadsheetId = mustEnv("SPREADSHEET_ID");
-    const sheets = await getSheetsClient();
-
-    // ✅ 멱등성: requestId 중복이면 append 금지
-    const dup = await isDuplicateRequestId(sheets, spreadsheetId, requestId);
-    if (dup) {
       return Response.json(
-        { ok: false, error: { code: "duplicate_request_id", message: "Request already processed." } },
-        { status: 409 }
+        {
+          ok: false,
+          data: null,
+          error: "invalid_userId",
+          meta: {},
+        },
+        { status: 400 },
       );
     }
 
-    // ✅ 이름 조회 (Ledger에 userName 컬럼이 있으면 채우고 없으면 무시)
-    const userName = await findUserNameById(sheets, spreadsheetId, userId);
-
-    // ✅ Ledger 헤더를 읽어서 컬럼 인덱스 기반으로 row 생성
-    const ledgerGet = await sheets.spreadsheets.values.get({
-      spreadsheetId,
-      range: "Ledger!A:Z",
-    });
-
-    const ledgerRows = ledgerGet.data.values || [];
-    if (ledgerRows.length < 1) {
+    if (!Number.isFinite(amount) || amount <= 0) {
       return Response.json(
-        { ok: false, error: { code: "ledger_empty", message: "Ledger header row is missing." } },
-        { status: 500 }
+        {
+          ok: false,
+          data: null,
+          error: "invalid_amount",
+          meta: {},
+        },
+        { status: 400 },
       );
     }
 
-    const h = headerIndexMap(ledgerRows[0]);
-
-    const cols = {
-      ledgerId: h.ledgerId,
-      userId: h.userId,
-      userName: h.userName, // ✅ optional
-      type: h.type,
-      amount: h.amount,
-      relatedSessionId: h.relatedSessionId,
-      memo: h.memo,
-      createdAt: h.createdAt,
-      requestId: h.requestId,
-    };
-
-    // 필수 컬럼 체크
-    const required = ["ledgerId", "userId", "type", "amount", "createdAt", "requestId"];
-    for (const k of required) {
-      if (cols[k] == null) {
-        return Response.json(
-          { ok: false, error: { code: "ledger_header_mismatch", detail: { missing: k, header: Object.keys(h) } } },
-          { status: 500 }
-        );
-      }
-    }
-
-    // row 길이는 헤더 길이에 맞추기
-    const row = new Array(ledgerRows[0].length).fill("");
-
-    const ledgerId = makeLedgerId();
-    const createdAt = new Date().toISOString();
-
-    row[cols.userId] = userId;
-    if (cols.userName != null) row[cols.userName] = userName;
-    row[cols.type] = "topup";
-    row[cols.amount] = String(amount);
-    if (cols.memo != null) row[cols.memo] = "충전";
-    row[cols.createdAt] = createdAt;
-    if (cols.relatedSessionId != null) row[cols.relatedSessionId] = "";
-    row[cols.ledgerId] = ledgerId;
-    row[cols.requestId] = requestId;
-
-    // ✅ append는 "Ledger" 시트에 1행 추가 (range는 A:Z로 넉넉히)
-    await sheets.spreadsheets.values.append({
-      spreadsheetId,
-      range: "Ledger!A:Z",
-      valueInputOption: "RAW",
-      requestBody: { values: [row] },
+    const appended = await appendLedgerRow({
+      userId,
+      userName,
+      relatedSessionId: "",
+      amount,
     });
 
     return Response.json({
       ok: true,
-      data: { ledgerId, userId, userName, amount, createdAt, requestId },
-      meta: {},
+      data: {
+        userId,
+        userName,
+        type: "topup",
+        amount,
+        createdAt: appended.createdAt,
+        relatedSessionId: relatedSessionId || null,
+        ledgerId: appended.ledgerId,
+        requestId: appended.requestId,
+      },
+      error: null,
+      meta: {
+        updates: appended.updates,
+      },
     });
-  } catch (e) {
-    console.error(e);
+  } catch (error) {
+    console.error("POST /api/ledger/topup error:", error);
+
     return Response.json(
-      { ok: false, error: { code: "server_error", message: String(e?.message || e) } },
-      { status: 500 }
+      {
+        ok: false,
+        data: null,
+        error: "topup_failed",
+        meta: {
+          message: String(error?.message ?? error),
+        },
+      },
+      { status: 500 },
     );
   }
 }

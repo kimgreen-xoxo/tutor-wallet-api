@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { headers } from "next/headers";
 import styles from "./CustomerDetail.module.css";
-import TopupMadal from "./components/TopupModal/TopupModal";
+import CustomerDetailClient from "./CustomerDetailClient.client";
 
 /** 역할: 어떤 값이 와도 안전한 문자열(공백 제거)로 변환 */
 function toStr(v) {
@@ -78,7 +78,7 @@ export default async function AdminCustomerDetailPage({ params }) {
   // ✅ 성공 시: Client 컴포넌트로 데이터 전달 (모달/버튼은 client에서 관리)
   return (
     <div className={styles.wrapper}>
-      <TopupMadal customer={result.data} />
+      <CustomerDetailClient customer={result.data} />
     </div>
   );
 }
